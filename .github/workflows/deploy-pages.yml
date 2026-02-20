@@ -1,0 +1,85 @@
+name: Deploy UI Templates to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build template apps
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          PUBLIC_DIR="${GITHUB_WORKSPACE}/public"
+          mkdir -p "$PUBLIC_DIR"
+
+          for dir in */; do
+            if [[ ! -f "${dir}package.json" ]]; then
+              continue
+            fi
+
+            template="${dir%/}"
+            echo "::group::Build ${template}"
+
+            pushd "$template" >/dev/null
+
+            if [[ -f package-lock.json ]]; then
+              npm ci
+            else
+              npm install
+            fi
+
+            VITE_BASE_PATH="/ui-templates/${template}/" npm run build --if-present
+
+            popd >/dev/null
+
+            if [[ -d "${template}/dist" ]]; then
+              rm -rf "${PUBLIC_DIR:?}/${template}"
+              mkdir -p "${PUBLIC_DIR}/${template}"
+              cp -R "${template}/dist/." "${PUBLIC_DIR}/${template}"
+            fi
+
+            echo "::endgroup::"
+          done
+
+          cp index.html "${PUBLIC_DIR}/index.html"
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./public
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
