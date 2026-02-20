@@ -1,0 +1,46 @@
+name: Deploy Codex Finance Dashboard
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - codex-finance-dashboard/**
+      - .github/workflows/deploy-codex-finance-dashboard.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deploy-finance-dashboard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        working-directory: codex-finance-dashboard
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Build template
+        working-directory: codex-finance-dashboard
+        run: VITE_BASE_PATH=/ui-templates/codex-finance-dashboard/ npm run build
+
+      - name: Deploy template to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ./codex-finance-dashboard/dist
+          destination_dir: ui-templates/codex-finance-dashboard
+          keep_files: true
